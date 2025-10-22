@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "智云课堂导出助手",
+  "version": "1.0",
+  "description": "自动将智云课堂的PPT与讲解字幕结合导出为PDF",
+  "permissions": ["activeTab", "scripting", "downloads"],
+  "host_permissions": ["*://interactivemeta.cmc.zju.edu.cn/*","*://classroom.zju.edu.cn/*"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "导出智云课堂PDF"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://interactivemeta.cmc.zju.edu.cn/*"],
+      "js": ["jsPDF.min.js", "content.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["jsPDF.min.js","msyh_base64.txt"],
+      "matches": ["*://interactivemeta.cmc.zju.edu.cn/*","*://classroom.zju.edu.cn/*"]
+    }
+  ],
+  "icons": {
+      "16": "icons/16.png",
+      "48": "icons/48.png",
+      "128": "icons/128.png"
+    }
+}
