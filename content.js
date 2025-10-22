@@ -56,28 +56,6 @@ console.log("content.js 已注入");
     return d.toLocaleTimeString("zh-CN", { hour12: false });
   }
 
-  async function fetchImageAsDataURLNoCreds(url) {
-    const fixed = String(url).replace(/^http:/, "https:");
-    try {
-      const resp = await fetch(fixed, { mode: "cors" });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const blob = await resp.blob();
-      if (!blob.type || !blob.type.startsWith("image/")) {
-        throw new Error(`响应非图片，Content-Type=${blob.type}`);
-      }
-      return await new Promise((res, rej) => {
-        const reader = new FileReader();
-        reader.onload = () => res(reader.result);
-        reader.onerror = rej;
-        reader.readAsDataURL(blob);
-      });
-    } catch (err) {
-      const e = new Error(`${err.message} | ${fixed}`);
-      e.cause = err;
-      throw e;
-    }
-  }
-
   function loadImage(url) {
     return new Promise((resolve, reject) => {
       const img = new Image();
@@ -97,15 +75,11 @@ console.log("content.js 已注入");
       canvas.width = size;
       canvas.height = size;
 
-      // 绘制第一张图
       ctx.drawImage(img1, 0, 0, size, size);
       const data1 = ctx.getImageData(0, 0, size, size).data;
-
-      // 绘制第二张图
       ctx.drawImage(img2, 0, 0, size, size);
       const data2 = ctx.getImageData(0, 0, size, size).data;
 
-      // 计算像素相似度
       let same = 0;
       for (let i = 0; i < data1.length; i += 4) {
         const diff = Math.abs(data1[i] - data2[i])
@@ -113,7 +87,6 @@ console.log("content.js 已注入");
                   + Math.abs(data1[i + 2] - data2[i + 2]);
         if (diff < 30) same++;
       }
-
       const similarity = same / (data1.length / 4);
       return similarity > threshold;
     } catch (e) {
@@ -122,91 +95,56 @@ console.log("content.js 已注入");
     }
   }
 
-  
-async function isSameImage(url1, url2, threshold = 0.98) {
-  try {
-    const [img1, img2] = await Promise.all([loadImage(url1), loadImage(url2)]);
-    const size = 32;
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d");
-    canvas.width = size;
-    canvas.height = size;
+  async function makePdf(result) {
+    const pdf = new jsPDF({ orientation: "p", unit: "px", format: "a4" });
+    const total = result.length;
 
-    // 绘制第一张图
-    ctx.drawImage(img1, 0, 0, size, size);
-    const data1 = ctx.getImageData(0, 0, size, size).data;
+    let lastImgUrl = null;
+    let pageNum = 0;
 
-    // 绘制第二张图
-    ctx.drawImage(img2, 0, 0, size, size);
-    const data2 = ctx.getImageData(0, 0, size, size).data;
+    for (const [i, page] of result.entries()) {
+      try {
+        const currentUrl = page.img.replace(/^http:/, "https:");
 
-    let same = 0;
-    for (let i = 0; i < data1.length; i += 4) {
-      const diff = Math.abs(data1[i] - data2[i])
-                 + Math.abs(data1[i + 1] - data2[i + 1])
-                 + Math.abs(data1[i + 2] - data2[i + 2]);
-      if (diff < 30) same++;
-    }
+        if (lastImgUrl && await isSameImage(lastImgUrl, currentUrl)) {
+          console.log(`⚠️ 第 ${i + 1} 页与上一页重复，已跳过`);
+          continue;
+        }
 
-    const similarity = same / (data1.length / 4);
-    return similarity > threshold;
-  } catch (e) {
-    console.warn("图片比对失败：", e);
-    return false;
-  }
-}
+        const img = await loadImage(currentUrl);
+        const canvas = document.createElement("canvas");
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0);
+        const imgData = canvas.toDataURL("image/jpeg");
 
-async function makePdf(result) {
-  const pdf = new jsPDF({ orientation: "p", unit: "px", format: "a4" });
-  const total = result.length;
+        pageNum++;
+        const header = `第 ${pageNum} 页（${new Date(page.startTime).toLocaleString("zh-CN")}）`;
+        pdf.setFontSize(12);
+        pdf.text(header, 20, 20);
+        pdf.addImage(imgData, "JPEG", 20, 40, 400, 225);
 
-  let lastImgUrl = null;
-  let pageNum = 0;
+        const text = (page.texts || []).join("\n");
+        pdf.setFontSize(10);
+        pdf.text(text || "（暂无文字）", 20, 280, { maxWidth: 400 });
 
-  for (const [i, page] of result.entries()) {
-    try {
-      const currentUrl = page.img.replace(/^http:/, "https:");
+        pdf.setFontSize(9);
+        pdf.text(`Page ${pageNum}`, 400, 560);
 
-      // 检测是否重复
-      if (lastImgUrl && await isSameImage(lastImgUrl, currentUrl)) {
-        console.log(`⚠️ 第 ${i + 1} 页与上一页重复，已跳过`);
-        continue;
+        lastImgUrl = currentUrl;
+        if (i < total - 1) pdf.addPage();
+
+      } catch (err) {
+        console.error("插入图片失败:", err, page.img);
       }
-
-      const img = await loadImage(currentUrl);
-      const canvas = document.createElement("canvas");
-      canvas.width = img.width;
-      canvas.height = img.height;
-      const ctx = canvas.getContext("2d");
-      ctx.drawImage(img, 0, 0);
-      const imgData = canvas.toDataURL("image/jpeg");
-
-      pageNum++;
-      const header = `第 ${pageNum} 页（${new Date(page.startTime).toLocaleString("zh-CN")}）`;
-      pdf.setFontSize(12);
-      pdf.text(header, 20, 20);
-      pdf.addImage(imgData, "JPEG", 20, 40, 400, 225);
-
-      const text = (page.texts || []).join("\n");
-      pdf.setFontSize(10);
-      pdf.text(text || "（暂无文字）", 20, 280, { maxWidth: 400 });
-
-      pdf.setFontSize(9);
-      pdf.text(`Page ${pageNum}`, 400, 560);
-
-      lastImgUrl = currentUrl;
-      if (i < total - 1) pdf.addPage();
-
-    } catch (err) {
-      console.error("插入图片失败:", err, page.img);
     }
-  }
-    const courseTitle = document.querySelector(".title")?.textContent?.trim() || "未知课程";
-    const subTitle = document.querySelector(".sub")?.textContent?.trim() || "";
-    const fullTitle = subTitle ? `${courseTitle}-${subTitle}` : courseTitle;
-    const safeName = `${fullTitle}.pdf`.replace(/[\/\\:*?"<>|]/g, "_");
-    pdf.save(safeName);
-  }
+      const courseTitle = document.querySelector(".title")?.textContent?.trim() || "未知课程";
+      const subTitle = document.querySelector(".sub")?.textContent?.trim() || "";
+      const fullTitle = subTitle ? `${courseTitle}-${subTitle}` : courseTitle;
+      const safeName = `${fullTitle}.pdf`.replace(/[\/\\:*?"<>|]/g, "_");
+      pdf.save(safeName);
+    }
 
   async function tryFetchSearchPptOnce() {
     const course_id = getClassID("course_id");
