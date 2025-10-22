@@ -66,7 +66,7 @@ console.log("content.js 已注入");
     });
   }
 
-  async function isSameImage(url1, url2, threshold = 0.98) {
+  async function isSameImage(url1, url2, threshold = 0.75) {
     try {
       const [img1, img2] = await Promise.all([loadImage(url1), loadImage(url2)]);
       const size = 32;
