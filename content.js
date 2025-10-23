@@ -196,18 +196,15 @@ console.log("content.js 已注入");
         console.error("插入图片失败:", err, page.img);
       }
     }
-      const courseTitle =
-      document.querySelector(".title")?.textContent?.trim() ||
-      document.querySelector(".course_name")?.textContent?.trim() ||
-      "未知课程";
-
-    const subTitle =
-      document.querySelector(".sub")?.textContent?.trim() || "";
-
+    const courseTitle =
+    document.querySelector(".title")?.textContent?.trim() ||
+    document.querySelector(".course_name")?.textContent?.trim() ||
+    "未知课程";
+    const subTitle = document.querySelector(".sub")?.textContent?.trim() || "";
     const fullTitle = subTitle ? `${courseTitle}-${subTitle}` : courseTitle;
     const safeName = `${fullTitle}.pdf`.replace(/[\/\\:*?"<>|]/g, "_");
     pdf.save(safeName);
-    }
+  }
 
   async function tryFetchSearchPptOnce() {
     const course_id = getClassID("course_id");
