@@ -14,8 +14,6 @@
 
 ##  安装插件
 
-## 使用方法
-
 1. 进入我的仓库https://github.com/Auspiow/zhiyun-extension（难度★★）
 
 2. 下载插件压缩包（难度★）
