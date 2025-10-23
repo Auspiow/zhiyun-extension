@@ -50,12 +50,7 @@ console.log("content.js 已注入");
     }
     throw new Error("两个接口都请求失败");
   }
-
-  function formatTime(timestamp) {
-    const d = new Date(timestamp);
-    return d.toLocaleTimeString("zh-CN", { hour12: false });
-  }
-
+  
   function loadImage(url) {
     return new Promise((resolve, reject) => {
       const img = new Image();
@@ -66,7 +61,7 @@ console.log("content.js 已注入");
     });
   }
 
-  async function isSameImage(url1, url2, threshold = 0.75) {
+  async function isSameImage(url1, url2, threshold = 0.78) {
     try {
       const [img1, img2] = await Promise.all([loadImage(url1), loadImage(url2)]);
       const size = 32;
@@ -94,20 +89,42 @@ console.log("content.js 已注入");
       return false;
     }
   }
+  
+  let fontLoaded = false;
+  async function loadChineseFont(pdf) {
+    if (fontLoaded) return "SimHei";
+    const fontUrl = chrome.runtime.getURL("simhei.txt");
+    const base64 = await fetch(fontUrl).then(res => res.text());
+    pdf.addFileToVFS("simhei.ttf", base64);
+    pdf.addFont("simhei.ttf", "SimHei", "normal");
+    fontLoaded = true;
+    return "SimHei";
+  }
 
   async function makePdf(result) {
     const pdf = new jsPDF({ orientation: "p", unit: "px", format: "a4" });
+    const fontName = await loadChineseFont(pdf);
+    pdf.setFont(fontName);
+
     const total = result.length;
-
+    let finalTotalPages = 0;
     let lastImgUrl = null;
-    let pageNum = 0;
 
+    for (const [i, page] of result.entries()) {
+        const currentUrl = page.img.replace(/^http:/, "https:");
+        if (lastImgUrl && await isSameImage(lastImgUrl, currentUrl)) {
+            continue;
+        }
+        finalTotalPages++;
+        lastImgUrl = currentUrl;
+    }
+
+    lastImgUrl = null;
+    let pageNum = 0;
     for (const [i, page] of result.entries()) {
       try {
         const currentUrl = page.img.replace(/^http:/, "https:");
-
         if (lastImgUrl && await isSameImage(lastImgUrl, currentUrl)) {
-          console.log(`⚠️ 第 ${i + 1} 页与上一页重复，已跳过`);
           continue;
         }
 
@@ -120,20 +137,53 @@ console.log("content.js 已注入");
         const imgData = canvas.toDataURL("image/jpeg");
 
         pageNum++;
-        const header = `第 ${pageNum} 页（${new Date(page.startTime).toLocaleString("zh-CN")}）`;
+
+        const header = `Page ${pageNum} (${new Date(page.startTime).toLocaleString("en-CA", {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit'
+        })})`;
+
         pdf.setFontSize(12);
         pdf.text(header, 20, 20);
         pdf.addImage(imgData, "JPEG", 20, 40, 400, 225);
 
-        const text = (page.texts || []).join("\n");
+        pdf.setFont(fontName);
         pdf.setFontSize(10);
-        pdf.text(text || "（暂无文字）", 20, 280, { maxWidth: 400 });
+
+        const text = (page.texts || []).join("\n") || "（暂无文字）";
+        const lines = pdf.splitTextToSize(text, 400);
+        const maxLinesPerPage = 35;
+        let currentLine = 0;
+
+        while (currentLine < lines.length) {
+          const chunk = lines.slice(currentLine, currentLine + maxLinesPerPage);
+          pdf.text(chunk, 20, 280, { maxWidth: 400 });
+
+          currentLine += maxLinesPerPage;
+          if (currentLine < lines.length) {
+            pdf.addPage();
+            const header = `Page ${pageNum} (continued)`;
+            pdf.setFontSize(12);
+            pdf.text(header, 20, 20);
+            pdf.addImage(imgData, "JPEG", 20, 40, 400, 225);
+
+            pdf.setFontSize(9);
+            pdf.text(`Page ${pageNum} / ${finalTotalPages}`, 400, 560);
+
+            pdf.setFont(fontName);
+            pdf.setFontSize(10);
+          }
+        }
 
         pdf.setFontSize(9);
-        pdf.text(`Page ${pageNum}`, 400, 560);
+        pdf.text(`Page ${pageNum} / ${finalTotalPages}`, 400, 560);
 
         lastImgUrl = currentUrl;
-        if (i < total - 1) pdf.addPage();
+        if (pageNum < finalTotalPages-1) pdf.addPage();
 
       } catch (err) {
         console.error("插入图片失败:", err, page.img);
@@ -178,12 +228,15 @@ console.log("content.js 已注入");
           console.warn("⚠️ 解析 pptcontent 失败:", item);
         }
       }
+
+      const courseStartTime =pptList.length > 0 ? new Date(pptList[0].create_time).getTime() : 0;
       for (const transItem of transList) {
         const allContent = transItem.all_content || [];
         for (const content of allContent) {
           if (content.Text) {
+            const absTime = courseStartTime + (content.BeginSec || 0) * 1000;
             transData.push({
-              time: (content.BeginSec || 0) * 1000,
+              time: absTime,
               text: content.Text,
               trans: content.TransText || ""
             });
@@ -192,18 +245,50 @@ console.log("content.js 已注入");
       }
       pptData.sort((a, b) => a.time - b.time);
       transData.sort((a, b) => a.time - b.time);
-      const result = pptData.map((slide, idx) => {
-        const nextSlideTime = pptData[idx + 1]?.time ?? Infinity;
-        const texts = transData.filter((t) => t.time >= slide.time && t.time < nextSlideTime).map((t) => t.text);
-        return { img: slide.img, texts, startTime: formatTime(slide.time) };
+      const mergedPpt = [];
+
+      for (const slide of pptData) {
+        if (mergedPpt.length === 0) {
+          mergedPpt.push({ img: slide.img, startTime: slide.time });
+        } else {
+          const last = mergedPpt[mergedPpt.length - 1];
+          if (last.img === slide.img) {
+            continue;
+          } else {
+            mergedPpt.push({ img: slide.img, startTime: slide.time });
+          }
+        }
+      }
+      console.log("✅ 合并后 PPT 数量:", mergedPpt.length);
+      const result = mergedPpt.map((slide, idx) => {
+        const nextStart = mergedPpt[idx + 1]?.startTime ?? Infinity;
+        const texts = transData
+          .filter(t => t.time >= slide.startTime && t.time < nextStart)
+          .map(t => t.text);
+
+        return {
+          img: slide.img,
+          texts,
+          startTime: slide.startTime,
+        };
       });
+
+      console.log("✅ 匹配结果示例:", result.slice(0, 3).map(r => ({
+        startTime: new Date(r.startTime).toLocaleString(),
+        textPreview: r.texts.slice(0, 2),
+      })));
+
       console.log("✅ 数据整理完毕，共", result.length, "页");
       await makePdf(result);
     } catch (err) {
       console.error("❌ 请求 search-ppt 失败:", err);
     }
   }
-
+  console.log("🎉 智云课堂 search-ppt 工具已注入，可等待 popup 触发");
+  window.startZhiyunExport = async function () {
+  console.log("📥 收到 popup 调用，开始生成 PDF...");
   await tryFetchSearchPptOnce();
-  console.log("🎉 智云课堂 search-ppt 工具已就绪");
+  console.log("✅ 导出完成");
+  alert("✅ 导出完成！PDF 已下载。");
+};
 })();
