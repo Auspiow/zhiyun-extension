@@ -37,12 +37,18 @@ console.log("content.js 已注入");
   async function TryUrl(urls) {
     for (const url of urls) {
       try {
-        const resp = await fetch(url, { method: "GET", credentials: "include" });
+        const resp = await new Promise((resolve) => {
+          chrome.runtime.sendMessage(
+            { action: "fetchProxy", url },
+            (response) => resolve(response)
+          );
+        });
+
         if (resp.ok) {
           console.log(`✅ 成功使用接口: ${url}`);
-          return { url, data: await resp.json() };
+          return { url, data: resp.json };
         } else {
-          console.warn(`⚠️ 尝试下一个接口`);
+          console.warn(`⚠️ 请求失败: ${url}`, resp.error);
         }
       } catch (err) {
         console.warn(`❌ 请求失败: ${url}`, err);
@@ -50,6 +56,7 @@ console.log("content.js 已注入");
     }
     throw new Error("两个接口都请求失败");
   }
+
   
   function loadImage(url) {
     return new Promise((resolve, reject) => {
