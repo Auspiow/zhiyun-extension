@@ -14,17 +14,17 @@
 
 ##  安装插件
 
-1. 进入我的仓库https://github.com/Auspiow/zhiyun-extension（难度★★）
+1. 进入我的仓库https://github.com/Auspiow/zhiyun-extension
 
-2. 下载插件压缩包（难度★）
+2. 下载插件压缩包
 
    ![1](./assets/1.png)
 
-3. 解压缩（难度★）
+3. 解压缩
 
    ![2](./assets/2.png)
 
-4. 打开谷歌浏览器（推荐），进入chrome://extensions（难度★）
+4. 打开谷歌浏览器（推荐），进入chrome://extensions
 
    ![3](./assets/3.png)
 
