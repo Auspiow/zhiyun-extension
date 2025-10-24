@@ -27,15 +27,15 @@
 
 2. 下载插件压缩包
 
-    ![1](https://github.com/Auspiow/zhiyun-extension/raw/master/assets/1.png)
+    <img src="https://github.com/Auspiow/zhiyun-extension/raw/master/assets/1.png" alt="1" style="zoom: 33%;" />
 
 3. 解压缩
 
-   ![2](https://github.com/Auspiow/zhiyun-extension/raw/master/assets/2.png)
+   <img src="https://github.com/Auspiow/zhiyun-extension/raw/master/assets/2.png" alt="2"  />
 
 4. 打开谷歌浏览器（推荐），进入chrome://extensions
 
-   ![3](https://github.com/Auspiow/zhiyun-extension/raw/master/assets/3.png)
+   <img src="https://github.com/Auspiow/zhiyun-extension/raw/master/assets/3.png" alt="3" style="zoom:50%;" />
 
 5. 打开开发者模式并选中解压后的文件夹（分为两步）
 
@@ -43,15 +43,15 @@
 
 6. 然后可以看到安装了插件，记得检查右下角插件是否打开
 
-   ![5](https://github.com/Auspiow/zhiyun-extension/raw/master/assets/5.png)
+   <img src="https://github.com/Auspiow/zhiyun-extension/raw/master/assets/5.png" alt="5" style="zoom:50%;" />
 
 7. 推出后在浏览器的右上角可看到一个拼图形状的按钮
 
-   ![6](https://github.com/Auspiow/zhiyun-extension/raw/master/assets/6.png)
+   <img src="https://github.com/Auspiow/zhiyun-extension/raw/master/assets/6.png" alt="6" style="zoom: 50%;" />
 
 8. 点一下图钉按钮可以固定插件
 
-   ![7](https://github.com/Auspiow/zhiyun-extension/raw/master/assets/7.png)
+   <img src="https://github.com/Auspiow/zhiyun-extension/raw/master/assets/7.png" alt="7" style="zoom:50%;" />
 
    
 
@@ -61,22 +61,22 @@
 
 注意是进入具体的页面之后再点击插件：
 
-![](https://github.com/Auspiow/zhiyun-extension/raw/master/assets/8.png)
+<img src="https://github.com/Auspiow/zhiyun-extension/raw/master/assets/8.png" style="zoom: 33%;" />
 
 然后点击插件会出现按钮，按钮点击一次之后没有反应需要刷新一下
 
-![8](https://github.com/Auspiow/zhiyun-extension/raw/master/assets/9.png)
+<img src="https://github.com/Auspiow/zhiyun-extension/raw/master/assets/9.png" alt="8" style="zoom: 67%;" />
 
-<img src="https://github.com/Auspiow/zhiyun-extension/raw/master/assets/10.png" alt="9" style="zoom:80%;" />
+<img src="https://github.com/Auspiow/zhiyun-extension/raw/master/assets/10.png" alt="9" style="zoom: 50%;" />
 
 出现这个标志才算结束，下载列表会有pdf文件（或者是包含Markdown的压缩包），如果没有的话刷新后按照上面的流程走一遍
 
-<img src="https://github.com/Auspiow/zhiyun-extension/raw/master/assets/11.png" alt="10" style="zoom:80%;" />
+<img src="https://github.com/Auspiow/zhiyun-extension/raw/master/assets/11.png" alt="10" style="zoom: 50%;" />
 
 
 
 ## For Developers
 
-![11](https://github.com/Auspiow/zhiyun-extension/raw/master/assets/12.png)
+<img src="https://github.com/Auspiow/zhiyun-extension/raw/master/assets/12.png" alt="11" style="zoom: 50%;" />
 
 content.js是主要的内容脚本，里面的isSameImage是检测重复ppt的，参数threshold(0,1)用于判断两张ppt的近似程度，可以手动调整之后再更新插件以达到个性化的目的。数值越大，相似的ppt越多（过滤的越少）；数值越小，相似的ppt越少（过滤的越多）。
