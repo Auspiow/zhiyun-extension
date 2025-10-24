@@ -1,17 +1,101 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
   <meta charset="utf-8">
-  <title>智云课堂导出助手</title>
+  <title>智云课堂导出助手 · Auspiow</title>
   <style>
-    body { width: 240px; font-family: sans-serif; padding: 10px; background: #f9f9f9; }
-    button { width: 100%; padding: 8px; border-radius: 6px; border: none; background: #1976d2; color: white; cursor: pointer; }
-    button:hover { background: #1259a5; }
+    body {
+      width: 240px;
+      font-family: "Segoe UI", "PingFang SC", sans-serif;
+      padding: 16px;
+      background: linear-gradient(145deg, #f0f4ff, #ffffff);
+      color: #222;
+    }
+
+    h3 {
+      text-align: center;
+      font-size: 16px;
+      margin-bottom: 12px;
+      color: #1976d2;
+      letter-spacing: 0.5px;
+    }
+
+    .divider {
+      height: 1px;
+      background: #e0e0e0;
+      margin: 10px 0;
+    }
+
+    button {
+      width: 100%;
+      padding: 10px;
+      border-radius: 8px;
+      border: none;
+      font-size: 14px;
+      margin-top: 8px;
+      background: #1976d2;
+      color: white;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    button:hover {
+      background: #1259a5;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    }
+
+    button svg {
+      width: 16px;
+      height: 16px;
+      fill: white;
+    }
+
+    footer {
+      font-size: 11px;
+      text-align: center;
+      margin-top: 14px;
+      color: #777;
+    }
+
+    footer a {
+      color: #1976d2;
+      text-decoration: none;
+    }
+
+    footer a:hover {
+      text-decoration: underline;
+    }
   </style>
 </head>
 <body>
-  <h3>智云课堂导出助手</h3>
-  <button id="export">导出当前课程为 PDF</button>
+  <h3>📘 智云课堂导出助手</h3>
+  <div class="divider"></div>
+
+  <button id="exportpdf">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+      <path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zM14 3.5V8h4.5L14 3.5zM8 12h8v2H8v-2zm0 4h8v2H8v-2z"/>
+    </svg>
+    导出课程为 PDF
+  </button>
+
+  <button id="exportmd">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+      <path d="M4 4h16v16H4V4zm2 2v12h12V6H6zm1 3h2v3h1.5l1.5-2 1.5 2H15V9h2v6h-2v-2h-1.5l-1.5 2-1.5-2H9v2H7V9z"/>
+    </svg>
+    导出课程为 Markdown
+  </button>
+
+  <footer>
+    Made by <a href="https://github.com/Auspiow" target="_blank">Auspiow</a>
+  </footer>
+
+  <script src="jspdf.min.js"></script>
+  <script src="jszip.min.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

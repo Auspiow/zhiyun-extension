@@ -1,7 +1,13 @@
 console.log("content.js 已注入");
-(async function () {
-  if (window.__zhiyunHooked) {
-    console.log("已注入监听，无需重复。");
+
+(function () {
+  async function main() {
+  const pageHasExportFn = (() => {
+    try { return typeof window.startZhiyunExport === "function"; } catch (e) { return false; }
+  })();
+
+  if (window.__zhiyunHooked && pageHasExportFn) {
+    console.log("已注入监听且页面上下文已有导出函数，无需重复。");
     return;
   }
   window.__zhiyunHooked = true;
@@ -9,12 +15,12 @@ console.log("content.js 已注入");
   if (typeof window.jsPDF === "undefined" && typeof window.jspdf === "undefined") {
     await new Promise((resolve, reject) => {
       const script = document.createElement("script");
-      script.src = chrome.runtime.getURL("jspdf.min.js");
+      script.src = chrome.runtime.getURL("jspdf.min.js"); // 👈 改为小写
       script.onload = resolve;
       script.onerror = reject;
       document.head.appendChild(script);
     });
-    console.log("✅ jsPDF 本地脚本加载完毕");
+    console.log("✅ jspdf.min.js 本地脚本加载完毕");
   }
   const { jsPDF } = window.jspdf || window;
 
@@ -57,7 +63,6 @@ console.log("content.js 已注入");
     throw new Error("两个接口都请求失败");
   }
 
-  
   function loadImage(url) {
     return new Promise((resolve, reject) => {
       const img = new Image();
@@ -85,8 +90,8 @@ console.log("content.js 已注入");
       let same = 0;
       for (let i = 0; i < data1.length; i += 4) {
         const diff = Math.abs(data1[i] - data2[i])
-                  + Math.abs(data1[i + 1] - data2[i + 1])
-                  + Math.abs(data1[i + 2] - data2[i + 2]);
+          + Math.abs(data1[i + 1] - data2[i + 1])
+          + Math.abs(data1[i + 2] - data2[i + 2]);
         if (diff < 30) same++;
       }
       const similarity = same / (data1.length / 4);
@@ -96,7 +101,7 @@ console.log("content.js 已注入");
       return false;
     }
   }
-  
+
   let fontLoaded = false;
   async function loadChineseFont(pdf) {
     if (fontLoaded) return "SimHei";
@@ -118,12 +123,12 @@ console.log("content.js 已注入");
     let lastImgUrl = null;
 
     for (const [i, page] of result.entries()) {
-        const currentUrl = page.img.replace(/^http:/, "https:");
-        if (lastImgUrl && await isSameImage(lastImgUrl, currentUrl)) {
-            continue;
-        }
-        finalTotalPages++;
-        lastImgUrl = currentUrl;
+      const currentUrl = page.img.replace(/^http:/, "https:");
+      if (lastImgUrl && await isSameImage(lastImgUrl, currentUrl)) {
+        continue;
+      }
+      finalTotalPages++;
+      lastImgUrl = currentUrl;
     }
 
     lastImgUrl = null;
@@ -190,20 +195,81 @@ console.log("content.js 已注入");
         pdf.text(`Page ${pageNum} / ${finalTotalPages}`, 400, 560);
 
         lastImgUrl = currentUrl;
-        if (pageNum < finalTotalPages-1) pdf.addPage();
+        if (pageNum < finalTotalPages - 1) pdf.addPage();
 
       } catch (err) {
         console.error("插入图片失败:", err, page.img);
       }
     }
     const courseTitle =
-    document.querySelector(".title")?.textContent?.trim() ||
-    document.querySelector(".course_name")?.textContent?.trim() ||
-    "未知课程";
+      document.querySelector(".title")?.textContent?.trim() ||
+      document.querySelector(".course_name")?.textContent?.trim() ||
+      "未知课程";
     const subTitle = document.querySelector(".sub")?.textContent?.trim() || "";
     const fullTitle = subTitle ? `${courseTitle}-${subTitle}` : courseTitle;
     const safeName = `${fullTitle}.pdf`.replace(/[\/\\:*?"<>|]/g, "_");
     pdf.save(safeName);
+  }
+
+  async function makeMarkdown(result) {
+    if (typeof window.JSZip === "undefined") {
+      await new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = chrome.runtime.getURL("jszip.min.js");
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
+      });
+      console.log("✅ jszip.min.js 本地脚本加载完毕");
+    }
+
+    const zip = new JSZip();
+    const folder = zip.folder("course_export");
+
+    let md = "";
+    const courseTitle =
+      document.querySelector(".title")?.textContent?.trim() ||
+      document.querySelector(".course_name")?.textContent?.trim() ||
+      "未知课程";
+    const subTitle = document.querySelector(".sub")?.textContent?.trim() || "";
+    const fullTitle = subTitle ? `${courseTitle}-${subTitle}` : courseTitle;
+
+    md += `# ${fullTitle}\n\n`;
+    md += `> 导出时间：${new Date().toLocaleString("zh-CN")}\n\n`;
+
+    for (const [i, page] of result.entries()) {
+      const time = new Date(page.startTime).toLocaleString("zh-CN");
+      md += `---\n\n## 🖼️ 第 ${i + 1} 页\n\n`;
+      md += `**时间：** ${time}\n\n`;
+
+      const imgUrl = page.img.replace(/^http:/, "https:");
+      const imgResp = await fetch(imgUrl);
+      const blob = await imgResp.blob();
+      const arrayBuffer = await blob.arrayBuffer();
+      const imgName = `page_${i + 1}.jpg`;
+      folder.file(imgName, arrayBuffer);
+
+      md += `![PPT ${i + 1}](./${imgName})\n\n`;
+
+      const text = (page.texts || []).join("\n");
+      if (text.trim()) {
+        md += `**讲述内容：**\n\n${text}\n\n`;
+      } else {
+        md += `（暂无字幕）\n\n`;
+      }
+    }
+
+    folder.file(`${fullTitle}.md`, md);
+
+    const zipBlob = await zip.generateAsync({ type: "blob" });
+    const safeName = `${fullTitle}.zip`.replace(/[\/\\:*?"<>|]/g, "_");
+
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(zipBlob);
+    a.download = safeName;
+    a.click();
+
+    console.log(`✅ Markdown+图片 ZIP 导出完成：${safeName}`);
   }
 
   async function tryFetchSearchPptOnce() {
@@ -282,23 +348,55 @@ console.log("content.js 已注入");
           startTime: slide.startTime,
         };
       });
-
-      console.log("✅ 匹配结果示例:", result.slice(0, 3).map(r => ({
-        startTime: new Date(r.startTime).toLocaleString(),
-        textPreview: r.texts.slice(0, 2),
-      })));
-
       console.log("✅ 数据整理完毕，共", result.length, "页");
-      await makePdf(result);
+      return result;
     } catch (err) {
       console.error("❌ 请求 search-ppt 失败:", err);
     }
   }
+
   console.log("🎉 智云课堂 search-ppt 工具已注入，可等待 popup 触发");
-  window.startZhiyunExport = async function () {
-  console.log("📥 收到 popup 调用，开始生成 PDF...");
-  await tryFetchSearchPptOnce();
-  console.log("✅ 导出完成");
-  alert("✅ 导出完成！PDF 已下载。");
-};
+
+  window.startZhiyunExport = async function (type = "pdf") {
+    console.log(`📥 收到 popup 调用，开始生成 ${type.toUpperCase()}...`);
+
+    try {
+      const result = await tryFetchSearchPptOnce();
+
+      if (!result || !Array.isArray(result)) {
+        alert("❌ 导出失败：未能获取课程数据");
+        return;
+      }
+
+      if (type === "markdown") {
+        await makeMarkdown(result);
+        alert("✅ Markdown 导出完成！");
+      } else {
+        await makePdf(result);
+        alert("✅ PDF 导出完成！");
+      }
+
+      console.log(`✅ ${type.toUpperCase()} 导出完成`);
+    } catch (err) {
+      console.error("❌ 导出失败：", err);
+      alert("❌ 导出失败，请检查控制台日志。");
+    }
+  };
+
+    try {
+    const fn = window.startZhiyunExport;
+    if (typeof fn === "function") {
+      const script = document.createElement("script");
+      script.type = "text/javascript";
+      script.textContent = `window.startZhiyunExport = ${fn.toString()};\nconsole.log("✅ startZhiyunExport 已注入到页面主世界");`;
+      (document.documentElement || document.head || document.body).appendChild(script);
+      script.remove();
+    } else {
+      console.warn("无法注入到页面：window.startZhiyunExport 在 content script 中未定义");
+    }
+  } catch (e) {
+    console.error("注入 startZhiyunExport 到页面主世界失败：", e);
+  }
+}
+  main().catch(err => console.error("content.js 初始化失败：", err));
 })();
