@@ -119,9 +119,15 @@ console.log("content.js 已注入");
     pdf.setFont(fontName);
 
     for (let i = 0; i < result.length; i++) {
+      if (i > 0) pdf.addPage();
+
       const page = result[i];
       const imgUrl = page.img.replace(/^http:/, "https:");
       const img = await loadImage(imgUrl);
+
+      pdf.setFontSize(12);
+      const header = `Slide ${i + 1} (${page.current_time})`;
+      pdf.text(header, 20, 20);
 
       const canvas = document.createElement("canvas");
       canvas.width = img.width;
@@ -129,10 +135,6 @@ console.log("content.js 已注入");
       const ctx = canvas.getContext("2d");
       ctx.drawImage(img, 0, 0);
       const imgData = canvas.toDataURL("image/jpeg");
-
-      pdf.setFontSize(12)
-      const header = `Page ${i + 1} (${page.current_time})`;
-      pdf.text(header, 20, 20);
       pdf.addImage(imgData, "JPEG", 20, 40, 400, 225);
 
       pdf.setFontSize(10);
@@ -150,9 +152,7 @@ console.log("content.js 已注入");
 
       pdf.setFontSize(9);
       pdf.text(`Page ${i + 1} / ${result.length}`, 400, 560);
-      if (i < result.length - 1) pdf.addPage();
     }
-
     const courseTitle =
       document.querySelector(".title")?.textContent?.trim() ||
       document.querySelector(".course_name")?.textContent?.trim() || "未知课程";
@@ -179,15 +179,15 @@ console.log("content.js 已注入");
 
     const courseTitle =
       document.querySelector(".title")?.textContent?.trim() ||
-      document.querySelector(".course_name")?.textContent?.trim() ||
-      "未知课程";
+      document.querySelector(".course_name")?.textContent?.trim() || "未知课程";
     const subTitle = document.querySelector(".sub")?.textContent?.trim() || "";
     const fullTitle = subTitle ? `${courseTitle}-${subTitle}` : courseTitle;
     const safeName = fullTitle.replace(/[\/\\:*?"<>|]/g, "_");
 
-    let md = `# ${fullTitle}\n\n> 导出时间：${new Date().toLocaleString("zh-CN")}\n\n`;
+    const headerMd = `# ${fullTitle}\n\n> 导出时间：${new Date().toLocaleString("zh-CN")}\n\n`;
+    const mdParts = new Array(result.length);
 
-    const tasks = result.map(async (page, i) => {
+    await Promise.all(result.map(async (page, i) => {
       const time = page.current_time || "未知时间";
       const imgUrl = page.img.replace(/^http:/, "https:");
 
@@ -199,14 +199,15 @@ console.log("content.js 已注入");
 
       const text = (page.texts || []).join("\n").trim();
 
-      md += `---\n\n## 🖼️ 第 ${i + 1} 页\n\n`;
-      md += `**时间：** ${time}\n\n`;
-      md += `![PPT ${i + 1}](./${imgName})\n\n`;
-      md += text ? `**讲述内容：**\n\n${text}\n\n` : `（暂无字幕）\n\n`;
-    });
+      let part = `---\n\n## 🖼️ 第 ${i + 1} 页\n\n`;
+      part += `**时间：** ${time}\n\n`;
+      part += `![PPT ${i + 1}](./${imgName})\n\n`;
+      part += text ? `**讲述内容：**\n\n${text}\n\n` : `（暂无字幕）\n\n`;
 
-    await Promise.all(tasks);
+      mdParts[i] = part;
+    }));
 
+    const md = headerMd + mdParts.join("");
     folder.file(`${safeName}.md`, md);
     const zipBlob = await zip.generateAsync({ type: "blob" });
 
