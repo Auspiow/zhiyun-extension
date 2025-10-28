@@ -73,7 +73,7 @@ console.log("content.js 已注入");
     });
   }
 
-  async function isSameImage(url1, url2, threshold = 0.78) {
+  async function isSameImage(url1, url2, threshold = 0.72) {
     try {
       const [img1, img2] = await Promise.all([loadImage(url1), loadImage(url2)]);
       const size = 32;
@@ -114,81 +114,45 @@ console.log("content.js 已注入");
   }
 
   async function makePdf(result) {
-    const pdf = new jsPDF({ orientation: "p", unit: "px", format: "a4" });
+    const pdf = new jsPDF({ unit: "px", format: "a4" });
     const fontName = await loadChineseFont(pdf);
     pdf.setFont(fontName);
 
-    const total = result.length;
-    let finalTotalPages = 0;
-    let lastImgUrl = null;
+    for (let i = 0; i < result.length; i++) {
+      const page = result[i];
+      const imgUrl = page.img.replace(/^http:/, "https:");
+      const img = await loadImage(imgUrl);
 
-    for (const [i, page] of result.entries()) {
-      const currentUrl = page.img.replace(/^http:/, "https:");
-      if (lastImgUrl && await isSameImage(lastImgUrl, currentUrl)) {
-        continue;
-      }
-      finalTotalPages++;
-      lastImgUrl = currentUrl;
-    }
+      const canvas = document.createElement("canvas");
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0);
+      const imgData = canvas.toDataURL("image/jpeg");
 
-    lastImgUrl = null;
-    let pageNum = 0;
-    for (const [i, page] of result.entries()) {
-      try {
-        const currentUrl = page.img.replace(/^http:/, "https:");
-        const img = await loadImage(currentUrl);
-        const canvas = document.createElement("canvas");
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext("2d");
-        ctx.drawImage(img, 0, 0);
-        const imgData = canvas.toDataURL("image/jpeg");
-        pageNum++;
-        
-        const header = `Page ${pageNum} (${page.current_time})`;
+      pdf.setFontSize(12)
+      const header = `Page ${i + 1} (${page.current_time})`;
+      pdf.text(header, 20, 20);
+      pdf.addImage(imgData, "JPEG", 20, 40, 400, 225);
 
-        pdf.setFontSize(12);
-        pdf.text(header, 20, 20);
-        pdf.addImage(imgData, "JPEG", 20, 40, 400, 225);
-
-        pdf.setFont(fontName);
-        pdf.setFontSize(10);
-
-        const text = (page.texts || []).join("\n") || "（暂无文字）";
-        const lines = pdf.splitTextToSize(text, 400);
-        const maxLinesPerPage = 35;
-        let currentLine = 0;
-
-        while (currentLine < lines.length) {
-          const chunk = lines.slice(currentLine, currentLine + maxLinesPerPage);
-          pdf.text(chunk, 20, 280, { maxWidth: 400 });
-
-          currentLine += maxLinesPerPage;
-          if (currentLine < lines.length) {
-            pdf.addPage();
-            const header = `Page ${pageNum} (continued)`;
-            pdf.setFontSize(12);
-            pdf.text(header, 20, 20);
-            pdf.addImage(imgData, "JPEG", 20, 40, 400, 225);
-
-            pdf.setFontSize(9);
-            pdf.text(`Page ${pageNum} / ${finalTotalPages}`, 400, 560);
-
-            pdf.setFont(fontName);
-            pdf.setFontSize(10);
-          }
+      pdf.setFontSize(10);
+      const text = (page.texts || []).join("\n") || "（暂无文字）";
+      const lines = pdf.splitTextToSize(text, 400);
+      let y = 280;
+      for (const line of lines) {
+        if (y > 570) {
+          pdf.addPage();
+          y = 40;
         }
-
-        pdf.setFontSize(9);
-        pdf.text(`Page ${pageNum} / ${finalTotalPages}`, 400, 560);
-
-        lastImgUrl = currentUrl;
-        if (pageNum < finalTotalPages - 1) pdf.addPage();
-
-      } catch (err) {
-        console.error("插入图片失败:", err, page.img);
+        pdf.text(line, 20, y);
+        y += 12;
       }
+
+      pdf.setFontSize(9);
+      pdf.text(`Page ${i + 1} / ${result.length}`, 400, 560);
+      if (i < result.length - 1) pdf.addPage();
     }
+
     const courseTitle =
       document.querySelector(".title")?.textContent?.trim() ||
       document.querySelector(".course_name")?.textContent?.trim() || "未知课程";
@@ -213,91 +177,96 @@ console.log("content.js 已注入");
     const zip = new JSZip();
     const folder = zip.folder("course_export");
 
-    let md = "";
     const courseTitle =
       document.querySelector(".title")?.textContent?.trim() ||
       document.querySelector(".course_name")?.textContent?.trim() ||
       "未知课程";
     const subTitle = document.querySelector(".sub")?.textContent?.trim() || "";
     const fullTitle = subTitle ? `${courseTitle}-${subTitle}` : courseTitle;
+    const safeName = fullTitle.replace(/[\/\\:*?"<>|]/g, "_");
 
-    md += `# ${fullTitle}\n\n`;
-    md += `> 导出时间：${new Date().toLocaleString("zh-CN")}\n\n`;
+    let md = `# ${fullTitle}\n\n> 导出时间：${new Date().toLocaleString("zh-CN")}\n\n`;
 
-    for (const [i, page] of result.entries()) {
-      const time = page.current_time;
-      md += `---\n\n## 🖼️ 第 ${i + 1} 页\n\n`;
-      md += `**时间：** ${time}\n\n`;
-
+    const tasks = result.map(async (page, i) => {
+      const time = page.current_time || "未知时间";
       const imgUrl = page.img.replace(/^http:/, "https:");
+
       const imgResp = await fetch(imgUrl);
       const blob = await imgResp.blob();
       const arrayBuffer = await blob.arrayBuffer();
       const imgName = `page_${i + 1}.jpg`;
       folder.file(imgName, arrayBuffer);
 
+      const text = (page.texts || []).join("\n").trim();
+
+      md += `---\n\n## 🖼️ 第 ${i + 1} 页\n\n`;
+      md += `**时间：** ${time}\n\n`;
       md += `![PPT ${i + 1}](./${imgName})\n\n`;
+      md += text ? `**讲述内容：**\n\n${text}\n\n` : `（暂无字幕）\n\n`;
+    });
 
-      const text = (page.texts || []).join("\n");
-      if (text.trim()) {
-        md += `**讲述内容：**\n\n${text}\n\n`;
-      } else {
-        md += `（暂无字幕）\n\n`;
-      }
-    }
+    await Promise.all(tasks);
 
-    folder.file(`${fullTitle}.md`, md);
-
+    folder.file(`${safeName}.md`, md);
     const zipBlob = await zip.generateAsync({ type: "blob" });
-    const safeName = `${fullTitle}.zip`.replace(/[\/\\:*?"<>|]/g, "_");
 
     const a = document.createElement("a");
     a.href = URL.createObjectURL(zipBlob);
-    a.download = safeName;
+    a.download = `${safeName}.zip`;
     a.click();
 
-    console.log(`✅ Markdown+图片 ZIP 导出完成：${safeName}`);
+    console.log(`✅ Markdown+图片 ZIP 导出完成：${safeName}.zip`);
   }
 
   async function tryFetchSearchPptOnce() {
-    const course_id = getClassID("course_id");
-    const sub_id = getClassID("sub_id");
-    if (!course_id || !sub_id) {
+    const courseId = getClassID("course_id");
+    const subId = getClassID("sub_id");
+    if (!courseId || !subId) {
       console.log("❌ 页面 URL 中未找到 course_id 或 sub_id，跳过主动请求。");
       return;
     }
-    const ppturls = [
-      `https://interactivemeta.cmc.zju.edu.cn/pptnoteapi/v1/schedule/search-ppt?course_id=${encodeURIComponent(course_id)}&sub_id=${encodeURIComponent(sub_id)}&page=1&per_page=100`,
-      `https://classroom.zju.edu.cn/pptnote/v1/schedule/search-ppt?course_id=${encodeURIComponent(course_id)}&sub_id=${encodeURIComponent(sub_id)}&page=1&per_page=100`
+
+    const pptBaseUrls = [
+      `https://interactivemeta.cmc.zju.edu.cn/pptnoteapi/v1/schedule/search-ppt?course_id=${courseId}&sub_id=${subId}`,
+      `https://classroom.zju.edu.cn/pptnote/v1/schedule/search-ppt?course_id=${courseId}&sub_id=${subId}`
     ];
-    const transurls = [
-      `https://interactivemeta.cmc.zju.edu.cn/courseapi/v3/web-socket/search-trans-result?sub_id=${encodeURIComponent(sub_id)}&format=json`,
-      `https://yjapi.cmc.zju.edu.cn/courseapi/v3/web-socket/search-trans-result?sub_id=${encodeURIComponent(sub_id)}&format=json`
+
+    const transUrls = [
+      `https://interactivemeta.cmc.zju.edu.cn/courseapi/v3/web-socket/search-trans-result?sub_id=${subId}&format=json`,
+      `https://yjapi.cmc.zju.edu.cn/courseapi/v3/web-socket/search-trans-result?sub_id=${subId}&format=json`
     ];
-    
+
     try {
-      const { data: pptDataRaw } = await TryUrl(ppturls);
-      const { data: transDataRaw } = await TryUrl(transurls);
-      const pptList = pptDataRaw.list || [];
-      const transList = transDataRaw.list || [];
-      const pptData = [];
-      const transData = [];
-      for (const item of pptList) {
-        try {
-          const content = JSON.parse(item.content);
-          if (content.pptimgurl) {
-            pptData.push({ 
-              time: item.created_sec, 
-              current_time: item.create_time, 
-              img: content.pptimgurl 
-            });
-          }
-        } catch (e) {
-          console.warn("⚠️ 解析 pptcontent 失败:", item);
+      const pptList = [];
+      let page = 1;
+
+      while (true) {
+        const pptUrls = pptBaseUrls.map(
+          base => `${base}&page=${page}&per_page=100`
+        );
+        const { data: pptDataRaw } = await TryUrl(pptUrls);
+
+        if (!pptDataRaw?.list?.length) {
+          console.log(`📭 第 ${page} 页无数据，停止抓取。`);
+          break;
         }
+        for (const item of pptDataRaw.list) { 
+          try { 
+            const content = JSON.parse(item.content); 
+            if (content.pptimgurl) { 
+              pptList.push({ time: item.created_sec, current_time: item.create_time, img: content.pptimgurl }); 
+            } 
+          } catch (e) { console.warn("⚠️ 解析 pptcontent 失败:", item); } }
+        console.log(`📄 已获取第 ${page} 页，共 ${pptDataRaw.list.length} 条`);
+        page++;
       }
 
-      for (const transItem of transList) {
+      console.log("拿到 ppt 页数", pptList.length);
+
+      const { data: transDataRaw } = await TryUrl(transUrls);
+      const transData = [];
+
+      for (const transItem of transDataRaw.list || []) {
         const allContent = transItem.all_content || [];
         for (const content of allContent) {
           if (content.Text) {
@@ -308,31 +277,35 @@ console.log("content.js 已注入");
           }
         }
       }
-      pptData.sort((a, b) => a.time - b.time);
+
+      pptList.sort((a, b) => a.time - b.time);
       transData.sort((a, b) => a.time - b.time);
+
       const mergedPpt = [];
 
-      for (const slide of pptData) {
+      for (const slide of pptList) {
         if (mergedPpt.length === 0) {
           mergedPpt.push({ img: slide.img, time: slide.time, current_time: slide.current_time });
           continue;
         }
+
         const last = mergedPpt[mergedPpt.length - 1];
         const lastUrl = last.img.replace(/^http:/, "https:");
         const currentUrl = slide.img.replace(/^http:/, "https:");
         if (lastUrl === currentUrl) {
           continue;
         }
+
         try {
           const same = await isSameImage(lastUrl, currentUrl);
-          if (same) {
-            continue;
-          }
-        } catch (e) {
-        }
+          if (same) continue;
+        } catch (e) {}
+
         mergedPpt.push({ img: slide.img, time: slide.time, current_time: slide.current_time });
       }
+
       console.log("✅ 合并后 PPT 数量:", mergedPpt.length);
+
       const result = mergedPpt.map((slide, idx) => {
         const nextStart = mergedPpt[idx + 1]?.time ?? Infinity;
         const texts = transData
@@ -344,12 +317,16 @@ console.log("content.js 已注入");
           current_time: slide.current_time,
         };
       });
+
       console.log("✅ 数据整理完毕，共", result.length, "页");
       return result;
+
     } catch (err) {
       console.error("❌ 请求 search-ppt 失败:", err);
     }
   }
+
+
 
   console.log("🎉 智云课堂 search-ppt 工具已注入，可等待 popup 触发");
 
