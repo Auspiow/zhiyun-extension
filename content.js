@@ -15,7 +15,7 @@ console.log("content.js 已注入");
   if (typeof window.jsPDF === "undefined" && typeof window.jspdf === "undefined") {
     await new Promise((resolve, reject) => {
       const script = document.createElement("script");
-      script.src = chrome.runtime.getURL("jspdf.min.js"); // 👈 改为小写
+      script.src = chrome.runtime.getURL("jspdf.min.js");
       script.onload = resolve;
       script.onerror = reject;
       document.head.appendChild(script);
@@ -136,10 +136,6 @@ console.log("content.js 已注入");
     for (const [i, page] of result.entries()) {
       try {
         const currentUrl = page.img.replace(/^http:/, "https:");
-        if (lastImgUrl && await isSameImage(lastImgUrl, currentUrl)) {
-          continue;
-        }
-
         const img = await loadImage(currentUrl);
         const canvas = document.createElement("canvas");
         canvas.width = img.width;
@@ -147,17 +143,9 @@ console.log("content.js 已注入");
         const ctx = canvas.getContext("2d");
         ctx.drawImage(img, 0, 0);
         const imgData = canvas.toDataURL("image/jpeg");
-
         pageNum++;
-
-        const header = `Page ${pageNum} (${new Date(page.startTime).toLocaleString("en-CA", {
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit',
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit'
-        })})`;
+        
+        const header = `Page ${pageNum} (${page.current_time})`;
 
         pdf.setFontSize(12);
         pdf.text(header, 20, 20);
@@ -203,8 +191,7 @@ console.log("content.js 已注入");
     }
     const courseTitle =
       document.querySelector(".title")?.textContent?.trim() ||
-      document.querySelector(".course_name")?.textContent?.trim() ||
-      "未知课程";
+      document.querySelector(".course_name")?.textContent?.trim() || "未知课程";
     const subTitle = document.querySelector(".sub")?.textContent?.trim() || "";
     const fullTitle = subTitle ? `${courseTitle}-${subTitle}` : courseTitle;
     const safeName = `${fullTitle}.pdf`.replace(/[\/\\:*?"<>|]/g, "_");
@@ -238,7 +225,7 @@ console.log("content.js 已注入");
     md += `> 导出时间：${new Date().toLocaleString("zh-CN")}\n\n`;
 
     for (const [i, page] of result.entries()) {
-      const time = new Date(page.startTime).toLocaleString("zh-CN");
+      const time = page.current_time;
       md += `---\n\n## 🖼️ 第 ${i + 1} 页\n\n`;
       md += `**时间：** ${time}\n\n`;
 
@@ -287,6 +274,7 @@ console.log("content.js 已注入");
       `https://interactivemeta.cmc.zju.edu.cn/courseapi/v3/web-socket/search-trans-result?sub_id=${encodeURIComponent(sub_id)}&format=json`,
       `https://yjapi.cmc.zju.edu.cn/courseapi/v3/web-socket/search-trans-result?sub_id=${encodeURIComponent(sub_id)}&format=json`
     ];
+    
     try {
       const { data: pptDataRaw } = await TryUrl(ppturls);
       const { data: transDataRaw } = await TryUrl(transurls);
@@ -298,23 +286,24 @@ console.log("content.js 已注入");
         try {
           const content = JSON.parse(item.content);
           if (content.pptimgurl) {
-            pptData.push({ time: new Date(item.create_time).getTime() || 0, img: content.pptimgurl });
+            pptData.push({ 
+              time: item.created_sec, 
+              current_time: item.create_time, 
+              img: content.pptimgurl 
+            });
           }
         } catch (e) {
           console.warn("⚠️ 解析 pptcontent 失败:", item);
         }
       }
 
-      const courseStartTime =pptList.length > 0 ? new Date(pptList[0].create_time).getTime() : 0;
       for (const transItem of transList) {
         const allContent = transItem.all_content || [];
         for (const content of allContent) {
           if (content.Text) {
-            const absTime = courseStartTime + (content.BeginSec || 0) * 1000;
             transData.push({
-              time: absTime,
+              time: content.BeginSec,
               text: content.Text,
-              trans: content.TransText || ""
             });
           }
         }
@@ -325,27 +314,34 @@ console.log("content.js 已注入");
 
       for (const slide of pptData) {
         if (mergedPpt.length === 0) {
-          mergedPpt.push({ img: slide.img, startTime: slide.time });
-        } else {
-          const last = mergedPpt[mergedPpt.length - 1];
-          if (last.img === slide.img) {
-            continue;
-          } else {
-            mergedPpt.push({ img: slide.img, startTime: slide.time });
-          }
+          mergedPpt.push({ img: slide.img, time: slide.time, current_time: slide.current_time });
+          continue;
         }
+        const last = mergedPpt[mergedPpt.length - 1];
+        const lastUrl = last.img.replace(/^http:/, "https:");
+        const currentUrl = slide.img.replace(/^http:/, "https:");
+        if (lastUrl === currentUrl) {
+          continue;
+        }
+        try {
+          const same = await isSameImage(lastUrl, currentUrl);
+          if (same) {
+            continue;
+          }
+        } catch (e) {
+        }
+        mergedPpt.push({ img: slide.img, time: slide.time, current_time: slide.current_time });
       }
       console.log("✅ 合并后 PPT 数量:", mergedPpt.length);
       const result = mergedPpt.map((slide, idx) => {
-        const nextStart = mergedPpt[idx + 1]?.startTime ?? Infinity;
+        const nextStart = mergedPpt[idx + 1]?.time ?? Infinity;
         const texts = transData
-          .filter(t => t.time >= slide.startTime && t.time < nextStart)
+          .filter(t => t.time >= slide.time && t.time < nextStart)
           .map(t => t.text);
-
         return {
           img: slide.img,
           texts,
-          startTime: slide.startTime,
+          current_time: slide.current_time,
         };
       });
       console.log("✅ 数据整理完毕，共", result.length, "页");
