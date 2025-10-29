@@ -75,9 +75,8 @@
 
 content.js是主要的内容脚本，里面的isSameImage是检测重复ppt的，参数threshold(0,1)用于判断两张ppt的近似程度，可以手动调整之后再更新插件以达到个性化的目的。数值越大，相似的ppt越多（过滤的越少）；数值越小，相似的ppt越少（过滤的越多）。
 
+### 版本调整及后续优化方向
 
-### 版本调整
-
-请见[CHANGLOG](./CHANGELOG.md)
+请见[CHANGLOG](./CHANGELOG.md)以及[TODO](./TODO.md)
 
 ### 你的star是我前进的动力
