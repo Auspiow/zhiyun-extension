@@ -73,7 +73,7 @@ console.log("content.js 已注入");
     });
   }
 
-  async function isSameImage(url1, url2, threshold = 0.72) {
+  async function isSameImage(url1, url2, threshold = 0.8) {
     try {
       const [img1, img2] = await Promise.all([loadImage(url1), loadImage(url2)]);
       const size = 32;
@@ -113,6 +113,75 @@ console.log("content.js 已注入");
     return "SimHei";
   }
 
+  function cleanText(text, mode = "mild") {
+    if (!text) return "";
+
+    let t = String(text).trim();
+
+    t = t.replace(/\u00A0/g, " ").replace(/\s+/g, " ").trim();
+
+    if (/^[\s\p{P}\p{S}]+$/u.test(t)) return "";
+
+    const fillers = [
+      "嗯","嗯嗯","嗯嗯嗯","啊","呃","哦","唉","哈","哎","额","诶","欸","唔",
+      "这个","那个","然后","就是","其实","好像","对吧","你知道","对不对",
+      "我觉得","可能吧","吧","嘛","啦","呢","哈哈","嘿嘿","emm","emmm"
+    ];
+    const fillerPattern = new RegExp(
+      "(^|[\\s，。,.!?;:—\\-\\(\\)\\[\\]\"'“”‘’])(" +
+        fillers.map(s => s.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("|") +
+      ")(?=$|[\\s，。,.!?;:—\\-\\(\\)\\[\\]\"'“”‘’])",
+      "gi"
+    );
+    t = t.replace(fillerPattern, " ");
+
+    const replacements = {
+      "ppt": "幻灯片",
+      "PPT": "幻灯片",
+      "视频片": "视频",
+      "音频片": "音频",
+      "的 的": "的",
+      "就是说": "",
+      "然后我们": "我们",
+      "我们要说": "我们要学",
+      "非常非常": "非常"
+    };
+    for (const [wrong, right] of Object.entries(replacements)) {
+      t = t.replace(new RegExp(wrong, "gi"), right);
+    }
+
+    t = t.replace(/([好对是行有没要看说])\1{1,}/g, "$1");
+    t = t.replace(/([啊哦嗯呃哈欸呀])\1{1,}/g, "$1");
+
+    t = t.replace(/[，,]{2,}/g, "，")
+        .replace(/[。\.]{2,}/g, "。")
+        .replace(/[！!]{2,}/g, "！")
+        .replace(/[？\?]{2,}/g, "？")
+        .replace(/\s+/g, " ")
+        .trim();
+
+    if (/^[\s0-9０-９\.,，。]+$/.test(t)) return "";
+    if (/^[\s0-9０-９]+[^\w\u4e00-\u9fff]*([嗯啊呃哦唉哈欸])+[^\w\u4e00-\u9fff]*$/i.test(t)) {
+      return "";
+    }
+
+    const plain = t.replace(/^[\u2000-\u206F\u2E00-\u2E7F\p{P}\p{S}\s]+|[\u2000-\u206F\u2E00-\u2E7F\p{P}\p{S}\s]+$/gu,"").trim();
+    if ([...plain].length <= 1) return "";
+
+    if (/^[\u4e00-\u9fff]([。\.，,]?){0,1}$/.test(t)) return "";
+
+    if (!/[。！？!?]$/.test(t)) {
+      t = t + "。";
+    }
+
+    t = t.replace(/\s+/g, " ").trim();
+
+    if (t.length <= 2) return "";
+
+    return t;
+  }
+
+
   async function makePdf(result) {
     const pdf = new jsPDF({ unit: "px", format: "a4" });
     const fontName = await loadChineseFont(pdf);
@@ -126,7 +195,7 @@ console.log("content.js 已注入");
       const img = await loadImage(imgUrl);
 
       pdf.setFontSize(12);
-      const header = `Slide ${i + 1} (${page.current_time})`;
+      const header = `Page ${i + 1} (${page.current_time})`;
       pdf.text(header, 20, 20);
 
       const canvas = document.createElement("canvas");
@@ -270,10 +339,11 @@ console.log("content.js 已注入");
       for (const transItem of transDataRaw.list || []) {
         const allContent = transItem.all_content || [];
         for (const content of allContent) {
-          if (content.Text) {
+          const cleaned = cleanText(content.Text);
+          if (cleaned) {
             transData.push({
               time: content.BeginSec,
-              text: content.Text,
+              text: cleaned,
             });
           }
         }
